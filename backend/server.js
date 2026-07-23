@@ -20,6 +20,7 @@ app.use(express.json());
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/services", require("./routes/serviceRoutes"));
 app.use("/api/availability", require("./routes/availabilityRoutes"));
+app.use("/api/bookings", require("./routes/bookingRoutes"));
 
 app.get("/", (req, res) => {
   res.json({ message: "BookWise AI API is running" });

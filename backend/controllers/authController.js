@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Provider = require("../models/Provider");
+const { sendEmail } = require("../utils/email");
+const { generateOTP, OTP_EXPIRY_MINUTES } = require("../utils/otp");
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -63,6 +65,7 @@ const signup = async (req, res) => {
 };
 
 // @route  POST /api/auth/login
+// @desc   Step 1 of login: verify password, then email an OTP. No token issued yet.
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -75,6 +78,63 @@ const login = async (req, res) => {
     if (!provider || !(await provider.matchPassword(password))) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
+
+    const otp = generateOTP();
+    provider.otp = otp;
+    provider.otpExpiry = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    await provider.save();
+
+    try {
+      await sendEmail({
+        to: provider.email,
+        subject: "Your BookWise AI login code",
+        text: `Your login code is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't try to log in, you can ignore this email.`,
+      });
+    } catch (emailError) {
+      console.error("Failed to send OTP email:", emailError.message);
+      return res.status(500).json({ message: "Could not send OTP email. Please try again." });
+    }
+
+    return res.json({
+      message: "OTP sent to your email",
+      otpRequired: true,
+      providerId: provider._id,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @route  POST /api/auth/verify-otp
+// @desc   Step 2 of login: check the OTP, and only now issue the JWT
+const verifyOtp = async (req, res) => {
+  try {
+    const { providerId, otp } = req.body;
+
+    if (!providerId || !otp) {
+      return res.status(400).json({ message: "providerId and otp are required" });
+    }
+
+    const provider = await Provider.findById(providerId).select("+otp +otpExpiry");
+    if (!provider || !provider.otp) {
+      return res.status(400).json({ message: "No OTP request found. Please log in again." });
+    }
+
+    if (provider.otpExpiry < new Date()) {
+      provider.otp = null;
+      provider.otpExpiry = null;
+      await provider.save();
+      return res.status(400).json({ message: "OTP has expired. Please log in again." });
+    }
+
+    if (provider.otp !== otp) {
+      return res.status(400).json({ message: "Incorrect OTP" });
+    }
+
+    // OTP correct — clear it so it can't be reused, then issue the real token
+    provider.otp = null;
+    provider.otpExpiry = null;
+    await provider.save();
 
     return res.json({
       _id: provider._id,
@@ -89,9 +149,40 @@ const login = async (req, res) => {
   }
 };
 
+// @route  POST /api/auth/resend-otp
+// @desc   Re-send a fresh OTP if the old one expired or the email didn't arrive
+const resendOtp = async (req, res) => {
+  try {
+    const { providerId } = req.body;
+    if (!providerId) {
+      return res.status(400).json({ message: "providerId is required" });
+    }
+
+    const provider = await Provider.findById(providerId);
+    if (!provider) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    const otp = generateOTP();
+    provider.otp = otp;
+    provider.otpExpiry = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    await provider.save();
+
+    await sendEmail({
+      to: provider.email,
+      subject: "Your new BookWise AI login code",
+      text: `Your new login code is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
+    });
+
+    return res.json({ message: "A new OTP has been sent to your email" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // @route  GET /api/auth/me   (protected)
 const getMe = async (req, res) => {
   return res.json(req.provider);
 };
 
-module.exports = { signup, login, getMe };
+module.exports = { signup, login, verifyOtp, resendOtp, getMe };

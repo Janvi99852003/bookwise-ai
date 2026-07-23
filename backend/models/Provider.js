@@ -53,6 +53,17 @@ const providerSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // OTP login (2-step: password check, then email OTP)
+    otp: {
+      type: String,
+      default: null,
+      select: false, // never returned by default queries
+    },
+    otpExpiry: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   { timestamps: true }
 );
