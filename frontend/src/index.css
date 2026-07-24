@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background-color: #14231f;
+  color: #edeae0;
+}
+
+@layer components {
+  /* The ivory "index card" panel that floats on the dark ink background */
+  .ledger-card {
+    @apply bg-paper text-ink rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.35)];
+  }
+
+  /* A ledger-style row: label on the left, dotted leader, value on the right */
+  .ledger-row {
+    @apply flex items-baseline justify-between gap-2 py-2 border-b border-ink/10 last:border-b-0;
+  }
+  .ledger-row .dots {
+    @apply flex-1 border-b border-dotted border-ink/30 mx-2 translate-y-[-4px];
+  }
+
+  /* Primary brass button — the main call to action throughout the app */
+  .btn-brass {
+    @apply bg-brass hover:bg-brass-light text-ink font-body font-semibold px-5 py-2.5 rounded-md transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-outline {
+    @apply border border-ink/20 text-ink hover:bg-ink/5 font-body font-medium px-5 py-2.5 rounded-md transition-colors duration-150;
+  }
+
+  .input-field {
+    @apply w-full bg-white/60 border border-ink/15 rounded-md px-3.5 py-2.5 font-body text-ink placeholder:text-ink/40 focus:outline-none focus:ring-2 focus:ring-brass/60 focus:border-brass transition-shadow;
+  }
+
+  /* A single bookable time slot chip */
+  .slot-chip {
+    @apply font-mono text-sm px-3 py-2 rounded border border-ink/20 text-ink hover:border-brass hover:bg-brass/10 transition-colors cursor-pointer;
+  }
+  .slot-chip.selected {
+    @apply bg-brass border-brass text-ink;
+  }
+  .slot-chip.disabled {
+    @apply opacity-30 cursor-not-allowed hover:border-ink/20 hover:bg-transparent;
+  }
+
+  /* Signature element: a stamped ticket stub for a confirmed booking, with a perforated edge */
+  .ticket-stub {
+    @apply relative bg-paper text-ink rounded-md p-5 shadow-[0_4px_20px_rgba(0,0,0,0.35)];
+    background-image: radial-gradient(circle, #14231f 3px, transparent 3px);
+    background-size: 14px 14px;
+    background-position: -7px center;
+    background-repeat: repeat-y;
+  }
+  .ticket-stub::before {
+    content: "";
+    @apply absolute top-0 bottom-0 left-[64px] border-l-2 border-dashed border-ink/15;
+  }
+
+  .stamp {
+    @apply inline-flex items-center justify-center w-16 h-16 rounded-full border-4 border-sage text-sage font-display font-semibold text-xs uppercase tracking-wider rotate-[-8deg];
+    animation: stamp-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes stamp-in {
+    from {
+      transform: scale(2) rotate(-8deg);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1) rotate(-8deg);
+      opacity: 1;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp {
+    animation: none;
+  }
+}

@@ -185,4 +185,83 @@ const getMe = async (req, res) => {
   return res.json(req.provider);
 };
 
-module.exports = { signup, login, verifyOtp, resendOtp, getMe };
+// @route  POST /api/auth/forgot-password
+// @desc   Sends a reset code to the account's email — reuses the same OTP fields as login
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const provider = await Provider.findOne({ email: email.toLowerCase() });
+
+    // Always respond the same way whether or not the email exists — this avoids
+    // leaking which emails are registered (a basic security practice).
+    if (provider) {
+      const otp = generateOTP();
+      provider.otp = otp;
+      provider.otpExpiry = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+      await provider.save();
+
+      try {
+        await sendEmail({
+          to: provider.email,
+          subject: "Reset your BookWise AI password",
+          text: `Your password reset code is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't request this, you can ignore this email.`,
+        });
+      } catch (emailError) {
+        console.error("Failed to send reset email:", emailError.message);
+      }
+    }
+
+    return res.json({
+      message: "If that email is registered, a reset code has been sent.",
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @route  POST /api/auth/reset-password
+// @desc   Verifies the reset code and sets a new password
+const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: "email, otp and newPassword are required" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const provider = await Provider.findOne({ email: email.toLowerCase() }).select("+otp +otpExpiry");
+    if (!provider || !provider.otp) {
+      return res.status(400).json({ message: "No reset request found. Please try again." });
+    }
+
+    if (provider.otpExpiry < new Date()) {
+      provider.otp = null;
+      provider.otpExpiry = null;
+      await provider.save();
+      return res.status(400).json({ message: "Reset code has expired. Please request a new one." });
+    }
+
+    if (provider.otp !== otp) {
+      return res.status(400).json({ message: "Incorrect reset code" });
+    }
+
+    // Setting .password and calling .save() re-triggers the pre-save bcrypt hash hook
+    provider.password = newPassword;
+    provider.otp = null;
+    provider.otpExpiry = null;
+    await provider.save();
+
+    return res.json({ message: "Password updated. You can now log in with your new password." });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { signup, login, verifyOtp, resendOtp, getMe, forgotPassword, resetPassword };
